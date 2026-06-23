@@ -137,3 +137,6 @@ REST_FRAMEWORK = {
 
 # Django Channels
 ASGI_APPLICATION = 'core.asgi.application'
+
+# Custom user model
+AUTH_USER_MODEL = 'accounts.User'
