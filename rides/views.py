@@ -84,6 +84,18 @@ class AcceptRideView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
+        # Check if driver already has an active ride
+        active_ride = Ride.objects.filter(
+            driver=request.user,
+            status__in=['accepted', 'in_progress']
+        ).exists()
+
+        if active_ride:
+            return Response(
+                {"error": "You already have an active ride, complete it first"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
             ride = Ride.objects.get(id=ride_id, status='requested')
         except Ride.DoesNotExist:
@@ -100,7 +112,6 @@ class AcceptRideView(APIView):
             RideDetailSerializer(ride).data,
             status=status.HTTP_200_OK
         )
-
 
 class UpdateRideStatusView(APIView):
     permission_classes = [IsAuthenticated]
