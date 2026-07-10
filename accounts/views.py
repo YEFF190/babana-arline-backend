@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from .serializers import RequestOTPSerializer, VerifyOTPSerializer
 from .models import User
+from rest_framework_simplejwt.tokens import RefreshToken
 
 def generate_otp():
     """Generate a random 6-digit OTP code."""
@@ -83,10 +84,19 @@ class VerifyOTPView(APIView):
         # Delete OTP from cache so it can't be reused
         cache.delete(f"otp_{phone_number}")
 
+       # Generate JWT tokens for this user
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+        refresh_token = str(refresh)
+
         return Response({
             "message": "Login successful",
             "user_id": user.id,
             "phone_number": user.phone_number,
             "role": user.role,
-            "is_new_user": created
+            "is_new_user": created,
+            "tokens": {
+                "access": access_token,
+                "refresh": refresh_token,
+            }
         }, status=status.HTTP_200_OK)
