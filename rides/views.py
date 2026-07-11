@@ -192,3 +192,63 @@ class SendLocationPingView(APIView):
             {"message": "Location updated"},
             status=status.HTTP_200_OK
         )
+
+
+
+class CancelRideView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, ride_id):
+
+        # Try to find the ride in the database
+        # .get() throws DoesNotExist if no ride matches
+        # so we always wrap it in try/except to avoid server crash
+        try:
+            ride = Ride.objects.get(id=ride_id)
+        except Ride.DoesNotExist:
+            return Response(
+                {"error": "Ride not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Ownership check — only the passenger OR driver
+        # involved in this specific ride can cancel it
+        # request.user comes from the decoded JWT token automatically
+        if request.user != ride.passenger and request.user != ride.driver:
+            return Response(
+                {"error": "You are not part of this ride"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Passenger cancellation rules
+        # A passenger can only cancel before the ride starts
+        # Once in_progress they are ON the moto — cancellation
+        # would be dangerous and unfair to the driver
+        if request.user.role == 'passenger':
+            if ride.status not in ['requested', 'accepted']:
+                return Response(
+                    {"error": "Cannot cancel a ride that is already in progress"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Driver cancellation rules
+        # A driver can cancel when accepted (before starting)
+        # OR when in_progress (emergency: breakdown, accident)
+        # This protects the passenger from being stranded at night
+        elif request.user.role == 'driver':
+            if ride.status not in ['accepted', 'in_progress']:
+                return Response(
+                    {"error": "You can only cancel a ride you have accepted"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Update status and persist to database
+        ride.status = 'cancelled'
+        ride.save()
+
+        # Return full ride details so Flutter can update
+        # the entire screen without a second API call
+        return Response(
+            RideDetailSerializer(ride).data,
+            status=status.HTTP_200_OK
+        )

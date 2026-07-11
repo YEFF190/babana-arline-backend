@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    CancelRideView,
     RequestRideView,
     PassengerRideView,
     AvailableRidesView,
@@ -18,4 +19,7 @@ urlpatterns = [
     path('rides/<int:ride_id>/accept/', AcceptRideView.as_view(), name='accept-ride'),
     path('rides/<int:ride_id>/status/', UpdateRideStatusView.as_view(), name='update-status'),
     path('rides/<int:ride_id>/ping/', SendLocationPingView.as_view(), name='location-ping'),
+
+    # Shared endpoints (passenger and driver)
+    path('rides/<int:ride_id>/cancel/', CancelRideView.as_view(), name='cancel-ride'),
 ]
