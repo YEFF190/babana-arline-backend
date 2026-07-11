@@ -10,6 +10,10 @@ from .serializers import (
     LocationPingSerializer,
     RideDetailSerializer
 )
+VALID_TRANSITIONS = {
+    'accepted': ['in_progress'],
+    'in_progress': ['completed'],
+}
 
 
 class RequestRideView(APIView):
@@ -117,6 +121,11 @@ class UpdateRideStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, ride_id):
+
+        # Find the ride AND verify the requesting user is the driver
+        # If someone else tries to update this ride's status
+        # they get a 404 — we don't even tell them the ride exists
+        # This is a security pattern called "security through obscurity"
         try:
             ride = Ride.objects.get(id=ride_id, driver=request.user)
         except Ride.DoesNotExist:
@@ -125,6 +134,9 @@ class UpdateRideStatusView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Validate incoming data using our serializer
+        # partial=True means not all fields are required
+        # only the fields sent in the request will be validated
         serializer = RideStatusSerializer(
             ride,
             data=request.data,
@@ -139,7 +151,20 @@ class UpdateRideStatusView(APIView):
 
         new_status = serializer.validated_data['status']
 
-        # Update timestamps based on status change
+        # Consult the rulebook — is this transition allowed?
+        # .get(ride.status, []) safely returns empty list
+        # if current status has no valid transitions (e.g. completed)
+        # meaning no further updates are possible
+        if new_status not in VALID_TRANSITIONS.get(ride.status, []):
+            return Response(
+                {"error": f"Cannot transition from '{ride.status}' to '{new_status}'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Record timestamps for important status changes
+        # timezone.now() gives current time in UTC
+        # We store UTC and let Flutter convert to local time
+        # This avoids timezone confusion across different regions
         if new_status == 'in_progress':
             ride.started_at = timezone.now()
         elif new_status == 'completed':
