@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from .models import Ride, LocationPing
 from .serializers import (
     RideRequestSerializer,
@@ -21,11 +23,24 @@ class RequestRideView(APIView):
 
     def post(self, request):
         # Only passengers can request rides
-        if request.user.role != 'passenger':
+        
+        if request.user.role ==  'driver':
+            active_ride = Ride.objects.filter(
+            driver=request.user,
+            status__in=['accepted', 'in_progress']
+            ).exists()
+            if active_ride:
+                return Response(
+                    {"error": "You already have an active ride, complete it first!!"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        elif request.user.role != 'passenger':
             return Response(
                 {"error": "Only passengers can request rides"},
                 status=status.HTTP_403_FORBIDDEN
-            )
+            )    
+
 
         serializer = RideRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -169,7 +184,15 @@ class UpdateRideStatusView(APIView):
             ride.started_at = timezone.now()
         elif new_status == 'completed':
             ride.completed_at = timezone.now()
-
+            # Notify all connected clients about the ride completion
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'ride_{ride.id}',
+                {
+                    'type': 'ride_end',
+                    'message': 'Ride has been completed.'
+                }
+            )
         serializer.save()
 
         return Response(

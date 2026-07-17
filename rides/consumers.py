@@ -1,5 +1,7 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+from .models import Ride
+from channels.db import database_sync_to_async
 
 
 class RideTrackingConsumer(AsyncWebsocketConsumer):
@@ -7,16 +9,29 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         # Get ride_id from URL
         self.ride_id = self.scope['url_route']['kwargs']['ride_id']
-
         # Create unique group name for this ride
         self.room_group_name = f'ride_{self.ride_id}'
+
+        if not self.scope['user'].is_authenticated:
+            await self.close(code=4001)
+            return
+        try:
+            ride = await database_sync_to_async(
+                Ride.objects.select_related('passenger', 'driver').get
+                           )(id=self.ride_id)
+        except Ride.DoesNotExist:
+            await self.close(code=4002)
+            return
+        if self.scope['user'] not in [ride.passenger, ride.driver]:
+            await self.close(code=4003)
+            return
 
         # Join the group — await because it talks to Redis
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
-
+        
         # Accept the WebSocket connection
         await self.accept()
 
@@ -57,3 +72,13 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
             'longitude': event['longitude'],
             'speed': event.get('speed'),
         }))
+
+
+    async def ride_end(self, event):
+        # Send ride end event to THIS specific connection
+        await self.send(text_data=json.dumps({
+            'event': 'ride_end',
+            'message': event['message'],
+        }))
+        await self.close()
+    
