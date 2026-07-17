@@ -44,3 +44,12 @@ class User(AbstractBaseUser):
 
     def has_module_perms(self, app_label):
         return self.is_admin
+    
+
+class DriverStatus(models.Model):
+    driver = models.OneToOneField(User, on_delete=models.CASCADE)
+    is_available = models.BooleanField(default=False)
+    current_latitude = models.FloatField(null=True, blank=True)
+    current_longitude = models.FloatField(null=True, blank=True)
+    last_location_update = models.DateTimeField(null=True, blank=True)
+    last_updated = models.DateTimeField(null=True, blank=True)
