@@ -24,3 +24,6 @@ urlpatterns = [
     path('api/', include('rides.urls')),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
 ]
+
+
+

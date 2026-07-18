@@ -3,8 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from .utils import haversine_distance
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from accounts.models import DriverStatus
 from .models import Ride, LocationPing
 from .serializers import (
     RideRequestSerializer,
@@ -108,7 +110,7 @@ class AcceptRideView(APIView):
             driver=request.user,
             status__in=['accepted', 'in_progress']
         ).exists()
-
+        #Disallow accepting a new ride if the driver has an active one
         if active_ride:
             return Response(
                 {"error": "You already have an active ride, complete it first"},
@@ -300,3 +302,44 @@ class CancelRideView(APIView):
             RideDetailSerializer(ride).data,
             status=status.HTTP_200_OK
         )
+    
+class NearbyDriverView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Only passengers can access this
+        if request.user.role != 'passenger':
+            return Response(
+                {"error": "Only passengers can access this"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            passenger_lat = float(request.query_params.get('latitude'))
+            passenger_lon = float(request.query_params.get('longitude'))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Valid latitude and longitude query parameters are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        nearby_drivers = []
+        for driver_record in DriverStatus.objects.filter(is_available=True):
+            if driver_record.current_latitude is not None and driver_record.current_longitude is not None:
+                distance = haversine_distance(
+                    passenger_lat,
+                    passenger_lon,
+                    driver_record.current_latitude,
+                    driver_record.current_longitude
+                )
+                if distance <= 2:  # 2 km radius
+                    nearby_drivers.append({
+                        "driver_id": driver_record.driver.id,
+                        "full_name": driver_record.driver.full_name,
+                        "phone_number": driver_record.driver.phone_number,
+                        "current_latitude": driver_record.current_latitude,
+                        "current_longitude": driver_record.current_longitude,
+                        "distance_km": round(distance, 2)
+                    })
+        nearby_drivers.sort(key=lambda d: d['distance_km'])
+        return Response(nearby_drivers, status=status.HTTP_200_OK)
