@@ -88,11 +88,33 @@ class AvailableRidesView(APIView):
                 {"error": "Only drivers can view available rides"},
                 status=status.HTTP_403_FORBIDDEN
             )
+        nearby_rides = []
+        driver_satus = request.user.driverstatus
+        if driver_satus.current_latitude is None or driver_satus.current_longitude is None:
+            return Response(
+                {"error": "Driver's current location is not set"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        for ride in Ride.objects.filter(status='requested'):
+            distance = haversine_distance(
+                driver_satus.current_latitude,
+                driver_satus.current_longitude,
+                ride.pickup_latitude,
+                ride.pickup_longitude
+            )
+            if distance <= 3:  # 3 km radius
+                ride.distance_km = round(distance, 2)
+                nearby_rides.append(ride)
 
-        rides = Ride.objects.filter(status='requested')
-        serializer = RideDetailSerializer(rides, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
+        if nearby_rides:
+            serializer = RideDetailSerializer(nearby_rides, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {"message": "No nearby rides available"},
+                status=status.HTTP_200_OK
+            )
+            
 
 class AcceptRideView(APIView):
     permission_classes = [IsAuthenticated]
@@ -332,7 +354,7 @@ class NearbyDriverView(APIView):
                     driver_record.current_latitude,
                     driver_record.current_longitude
                 )
-                if distance <= 2:  # 2 km radius
+                if distance <= 3:  # 3 km radius
                     nearby_drivers.append({
                         "driver_id": driver_record.driver.id,
                         "full_name": driver_record.driver.full_name,

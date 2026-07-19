@@ -39,6 +39,7 @@ class RideDetailSerializer(serializers.ModelSerializer):
         source='driver.phone_number',
         read_only=True
     )
+    distance_km = serializers.FloatField(read_only=True, required=False)
 
     class Meta:
         model = Ride
@@ -57,4 +58,5 @@ class RideDetailSerializer(serializers.ModelSerializer):
             'created_at',
             'started_at',
             'completed_at',
+            'distance_km',
         ]
