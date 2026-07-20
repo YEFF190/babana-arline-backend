@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User
+from .models import User, EmergencyContact
 
 class RequestOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
@@ -21,3 +21,11 @@ class RequestOTPSerializer(serializers.Serializer):
 class VerifyOTPSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=20)
     otp_code = serializers.CharField(max_length=6, min_length=4)
+
+
+class EmergencyContactSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmergencyContact
+        fields = ['id', 'name', 'phone_number', 'relationship', 'created_at']
+        read_only_fields = ['id', 'created_at']
+        

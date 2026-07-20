@@ -53,3 +53,13 @@ class DriverStatus(models.Model):
     current_longitude = models.FloatField(null=True, blank=True)
     last_location_update = models.DateTimeField(null=True, blank=True)
     last_updated = models.DateTimeField(null=True, blank=True)
+
+class EmergencyContact(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='emergency_contacts')
+    name = models.CharField(max_length=100)
+    phone_number = models.CharField(max_length=20)
+    relationship = models.CharField(max_length=50,  blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.full_name}'s contact: {self.name} - {self.phone_number}"

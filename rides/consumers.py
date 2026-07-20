@@ -16,13 +16,13 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
         try:
-            ride = await database_sync_to_async(
+            self.ride = await database_sync_to_async(
                 Ride.objects.select_related('passenger', 'driver').get
                            )(id=self.ride_id)
         except Ride.DoesNotExist:
             await self.close(code=4002)
             return
-        if self.scope['user'] not in [ride.passenger, ride.driver]:
+        if self.scope['user'] not in [self.ride.passenger, self.ride.driver]:
             await self.close(code=4003)
             return
 
@@ -44,14 +44,25 @@ class RideTrackingConsumer(AsyncWebsocketConsumer):
         )
 
     async def receive(self, text_data):
+        if self.scope['user'] != self.ride.driver:
+            await self.send(text_data=json.dumps({
+                'error': 'Only the driver can send location updates.'
+            }))
+            return
         # Step 1 — Parse JSON string into Python dictionary
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
 
-        # Step 2 — Extract values from the dictionary
-        latitude = data['latitude']
-        longitude = data['longitude']
-        speed = data.get('speed')
-
+            # Step 2 — Extract values from the dictionary
+            latitude = data['latitude']
+            longitude = data['longitude']
+            speed = data.get('speed')
+        except (json.JSONDecodeError, KeyError):
+            await self.send(text_data=json.dumps({
+                'error': 'Invalid data format'
+            }))
+            return
+        
         # Step 3 — Broadcast to everyone in the group
         await self.channel_layer.group_send(
             self.room_group_name,

@@ -149,6 +149,9 @@ class AcceptRideView(APIView):
 
         ride.driver = request.user
         ride.status = 'accepted'
+        driver_status, created = DriverStatus.objects.get_or_create(driver=request.user)
+        driver_status.is_available = False
+        driver_status.save()
         ride.save()
 
         return Response(
@@ -217,6 +220,10 @@ class UpdateRideStatusView(APIView):
                     'message': 'Ride has been completed.'
                 }
             )
+            driver_status, created = DriverStatus.objects.get_or_create(driver=request.user)
+            driver_status.is_available = True
+            driver_status.save()
+
         serializer.save()
 
         return Response(
@@ -302,6 +309,10 @@ class CancelRideView(APIView):
                     {"error": "Cannot cancel a ride that is already in progress"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            elif ride.driver:
+                driver_status, created = DriverStatus.objects.get_or_create(driver=ride.driver)
+                driver_status.is_available = True
+                driver_status.save()
 
         # Driver cancellation rules
         # A driver can cancel when accepted (before starting)
