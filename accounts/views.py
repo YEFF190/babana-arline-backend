@@ -2,6 +2,7 @@ import random
 import string
 from django.core.cache import cache
 from django.utils import timezone
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -16,6 +17,7 @@ def generate_otp():
 
 class RequestOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         serializer = RequestOTPSerializer(data=request.data)
@@ -48,6 +50,7 @@ class RequestOTPView(APIView):
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
