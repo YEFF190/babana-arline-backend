@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django.utils import timezone
 from .utils import haversine_distance
 from asgiref.sync import async_to_sync
@@ -89,16 +90,16 @@ class AvailableRidesView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         nearby_rides = []
-        driver_satus = request.user.driverstatus
-        if driver_satus.current_latitude is None or driver_satus.current_longitude is None:
+        driver_status, created = DriverStatus.objects.get_or_create(driver = request.user)
+        if driver_status.current_latitude is None or driver_status.current_longitude is None:
             return Response(
                 {"error": "Driver's current location is not set"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         for ride in Ride.objects.filter(status='requested'):
             distance = haversine_distance(
-                driver_satus.current_latitude,
-                driver_satus.current_longitude,
+                driver_status.current_latitude,
+                driver_status.current_longitude,
                 ride.pickup_latitude,
                 ride.pickup_longitude
             )
@@ -138,21 +139,20 @@ class AcceptRideView(APIView):
                 {"error": "You already have an active ride, complete it first"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        try:
-            ride = Ride.objects.get(id=ride_id, status='requested')
-        except Ride.DoesNotExist:
-            return Response(
+        with transaction.atomic():
+            try:  
+                ride = Ride.objects.select_for_update().get(id=ride_id, status='requested')
+            except Ride.DoesNotExist:
+                return Response(
                 {"error": "Ride not found or already taken"},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-        ride.driver = request.user
-        ride.status = 'accepted'
-        driver_status, created = DriverStatus.objects.get_or_create(driver=request.user)
-        driver_status.is_available = False
-        driver_status.save()
-        ride.save()
+            ride.driver = request.user
+            ride.status = 'accepted'
+            driver_status, created = DriverStatus.objects.get_or_create(driver=request.user)
+            driver_status.is_available = False
+            driver_status.save()
+            ride.save()
 
         return Response(
             RideDetailSerializer(ride).data,
