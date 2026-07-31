@@ -3,16 +3,18 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
+from core.utils import send_sms
 from django.utils import timezone
 from .utils import haversine_distance
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from accounts.models import DriverStatus
-from .models import Ride, LocationPing
+from .models import Ride, LocationPing, SOSAlert, SOSRecord
 from .serializers import (
     RideRequestSerializer,
     RideStatusSerializer,
     LocationPingSerializer,
+    SOSAlertSerializer,
     RideDetailSerializer
 )
 VALID_TRANSITIONS = {
@@ -376,3 +378,68 @@ class NearbyDriverView(APIView):
                     })
         nearby_drivers.sort(key=lambda d: d['distance_km'])
         return Response(nearby_drivers, status=status.HTTP_200_OK)
+
+
+class SOSAlertView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = SOSAlertSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                serializer.errors,
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        
+        if not request.user.emergency_contacts.exists():
+            return Response(
+                {"error": "No emergency contacts available"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        sos_alert = serializer.save(user=request.user)
+
+        message = (
+            f"A l'aide SVP/ Help please! {request.user.full_name} "
+            f"({request.user.phone_number}) needs help. Location: "
+            f"https://maps.google.com/?q={sos_alert.latitude},{sos_alert.longitude}"
+        )
+
+        sent_count = 0
+        failed_count = 0
+
+        for contact in request.user.emergency_contacts.all():
+            result = send_sms(contact.phone_number, message) 
+
+            if result is None:
+                failed_count += 1
+                SOSRecord.objects.create(
+                    sos_alert=sos_alert,
+                    contact=contact,
+                    contact_name=contact.name,
+                    contact_phone_number=contact.phone_number,
+                    status='failed'
+                )
+            else:
+                sent_count += 1
+                message_id = result['SMSMessageData']['Recipients'][0]['messageId']
+                SOSRecord.objects.create(
+                    sos_alert=sos_alert,
+                    contact=contact,
+                    contact_name=contact.name,
+                    contact_phone_number=contact.phone_number,
+                    status='sent',
+                    message_id=message_id,
+                    sent_at=timezone.now()
+                )
+
+        return Response(
+            {
+                "message": "SOS alert triggered",
+                "sos_alert_id": sos_alert.id,
+                "contacts_notified": sent_count,
+                "contacts_failed": failed_count
+            },
+            status=status.HTTP_201_CREATED
+        )

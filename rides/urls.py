@@ -8,6 +8,7 @@ from .views import (
     UpdateRideStatusView,
     SendLocationPingView,
     NearbyDriverView,
+    SOSAlertView,
 )
 
 urlpatterns = [
@@ -24,4 +25,5 @@ urlpatterns = [
     # Shared endpoints (passenger and driver)
     path('rides/<int:ride_id>/cancel/', CancelRideView.as_view(), name='cancel-ride'),
     path('rides/nearby-drivers/', NearbyDriverView.as_view(), name='nearby-drivers'),
+    path('rides/sos-alert/', SOSAlertView.as_view(), name='sos-alert'),
 ]

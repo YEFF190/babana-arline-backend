@@ -2,6 +2,7 @@ import random
 import string
 from django.core.cache import cache
 from django.utils import timezone
+from core.utils import send_sms 
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -26,7 +27,7 @@ class RequestOTPView(APIView):
             return Response(
                 serializer.errors,
                 status=status.HTTP_400_BAD_REQUEST
-            )
+        )
 
         phone_number = serializer.validated_data['phone_number']
         role = serializer.validated_data['role']
@@ -36,11 +37,19 @@ class RequestOTPView(APIView):
         cache.set(f"otp_{phone_number}", {
             'otp': otp,
             'role': role
-        }, timeout=600)
+         }, timeout=600)
 
-        # TODO: Replace this with Africa's Talking SMS sending
-        # For now we print the OTP in the terminal (development only)
+        # Dev fallback — always visible in terminal, regardless of SMS outcome
         print(f"OTP for {phone_number}: {otp}")
+
+        message = f"This is Your six-digits code {otp}"
+        result = send_sms(phone_number, message)
+
+        if result is None:
+            return Response(
+                {"error": "Failed to send OTP, please try again"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response(
             {"message": "OTP sent successfully"},

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Ride, LocationPing
+from .models import Ride, LocationPing, SOSAlert
 
 class RideRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -28,6 +28,15 @@ class LocationPingSerializer(serializers.ModelSerializer):
     class Meta:
         model = LocationPing
         fields = ['latitude', 'longitude', 'speed']
+
+class SOSAlertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SOSAlert
+        fields = ['id', 'ride', 'latitude', 'longitude', 'triggered_at']
+        read_only_fields = ['id', 'triggered_at']
+        extra_kwargs = {
+            'ride': {'required': False, 'allow_null': True}
+        }
 
 
 class RideDetailSerializer(serializers.ModelSerializer):
